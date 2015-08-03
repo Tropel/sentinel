@@ -1,0 +1,20 @@
+---
+- hosts: webservers
+  user: sshafiullah
+  sudo: yes
+  sudo_user: root 
+
+  tasks:
+    - name: install tomcat7
+      action: apt name=tomcat7 update_cache=yes state=installed
+
+    - name: start tomcat
+      service:
+        name: tomcat7 
+        state: started
+
+    - name: Wait for tomcat to start
+      wait_for: port=8080 state=started
+
+    - name: Install postgres database
+      action: apt name=postgresql-9.3 state=installed
