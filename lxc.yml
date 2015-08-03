@@ -1,0 +1,60 @@
+---
+
+- hosts: sentinel
+  user: sshafiullah
+  sudo: yes
+  sudo_user: root
+
+  tasks:
+    - name: Install LXC 
+      apt:
+        name: lxc
+        update_cache: yes
+        state: installed
+
+    - name: Configure LXC default
+      copy:
+        src: lxc/lxc-net
+        dest: /etc/default/lxc-net
+
+    - name: Configure LXC dnsmasq 
+      copy:
+        src: lxc/dnsmasq.conf
+        dest: /etc/lxc/dnsmasq.conf
+    
+    - name: Restart lxc-net
+      shell: /usr/sbin/service lxc-net restart; /usr/bin/touch /opt/lxc
+      args:
+        creates: /opt/lxc
+
+    - apt: name={{item}}
+      with_items:
+        - python-setuptools 
+        - unzip
+        - git
+        - build-essential
+        - python-dev
+        - lxc-dev 
+
+    - easy_install: name=pip 
+    - pip: name=git+https://github.com/lxc/python2-lxc.git#egg=python2-lxc
+ 
+    - name: app1_container
+      lxc_container:
+        name: app1
+        template: ubuntu
+        state: started
+        template_options: --release trusty
+        container_command: |
+          apt-get update
+          apt-get install tomcat7 -y
+
+    - name: db1_container
+      lxc_container:
+        name: db1
+        template: ubuntu
+        state: started
+        template_options: --release trusty
+        container_command: |
+          apt-get update
+          apt-get install postgresql-9.3 -y

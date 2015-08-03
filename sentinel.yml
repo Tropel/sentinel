@@ -5,7 +5,7 @@
 # Date: 03-08-2015
 # Description: Creates LXC containers and installs Xwiki on top of a tomcat7 and Postgressql stack
 
-- hosts: webservers
+- hosts: sentinel 
   user: sshafiullah
   sudo: yes
   sudo_user: root 
@@ -61,7 +61,7 @@
     - name: Reload postgres configurations
       shell: /usr/bin/service postgresql restart; /usr/bin/touch /opt/postgres
       args:
-          creates: /opt/postgres
+        creates: /opt/postgres
 
 #    - name: Install psycopg2
 #      apt:
