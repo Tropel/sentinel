@@ -1,0 +1,2 @@
+CREATE DATABASE xwiki WITH OWNER = postgres ENCODING = 'UNICODE' TABLESPACE = pg_default;
+CREATE USER xwiki PASSWORD 'N0vember11' VALID UNTIL 'infinity';
