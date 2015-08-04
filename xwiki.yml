@@ -56,6 +56,16 @@
           apt-get update
           apt-get install tomcat7 -y
 
+    - name: app2_container
+      lxc_container:
+        name: app2
+        template: ubuntu
+        state: started
+        template_options: --release trusty
+        container_command: |
+          apt-get update
+          apt-get install tomcat7 -y
+
     - name: db1_container
       lxc_container:
         name: db1
@@ -66,28 +76,58 @@
           apt-get update
           apt-get install postgresql-9.3 -y
 
+    - name: create interfaces app1
+      copy:
+        src: lxc/app1_interfaces
+        dest: /var/lib/lxc/app1/rootfs/etc/network/interfaces
+
+    - name: create interfaces app2
+      copy:
+        src: lxc/app2_interfaces
+        dest: /var/lib/lxc/app2/rootfs/etc/network/interfaces
+
+    - name: create interfaces db1
+      copy:
+        src: lxc/db1_interfaces
+        dest: /var/lib/lxc/db1/rootfs/etc/network/interfaces
+
 # Tomcat7 configuration 
 
-    - name: create setenv.sh file
+    - name: create setenv.sh file app1
       copy:
         src: tomcat/setenv.sh
         dest: /var/lib/lxc/app1/rootfs/usr/share/tomcat7/bin/setenv.sh
-      notify: restart tomcat
     
-    - name: change attributes on setenv.sh
+    - name: create setenv.sh file app2
+      copy:
+        src: tomcat/setenv.sh
+        dest: /var/lib/lxc/app2/rootfs/usr/share/tomcat7/bin/setenv.sh
+
+    - name: change attributes on setenv.sh app1
       file:
         path: /var/lib/lxc/app1/rootfs/usr/share/tomcat7/bin/setenv.sh
         owner: root
         mode:  0755
-      notify: restart tomcat
 
-    - name: install postgres JDBC library
+    - name: change attributes on setenv.sh app2
+      file:
+        path: /var/lib/lxc/app2/rootfs/usr/share/tomcat7/bin/setenv.sh
+        owner: root
+        mode:  0755
+
+    - name: install postgres JDBC library app1
       get_url:
         dest: /var/lib/lxc/app1/rootfs/usr/share/tomcat7/lib/postgresql-9.4-1201.jdbc4.jar
         url: https://jdbc.postgresql.org/download/postgresql-9.4-1201.jdbc4.jar
         validate_certs: no
         force: no
 
+    - name: install postgres JDBC library app2
+      get_url:
+        dest: /var/lib/lxc/app2/rootfs/usr/share/tomcat7/lib/postgresql-9.4-1201.jdbc4.jar
+        url: https://jdbc.postgresql.org/download/postgresql-9.4-1201.jdbc4.jar
+        validate_certs: no
+        force: no
 
 # Postgres database configuration
 
@@ -119,32 +159,75 @@
 
 # Deploy the Xwiki application
 
-    - name: Download Xwiki war file
+    - name: Download Xwiki war file app1
       get_url:
         dest: /var/lib/lxc/app1/rootfs/opt/xwiki-enterprise-web-7.1.2-20150725.161333-26.war
         url: http://maven.xwiki.org/snapshots/org/xwiki/enterprise/xwiki-enterprise-web/7.1.2-SNAPSHOT/xwiki-enterprise-web-7.1.2-20150725.161333-26.war 
         force: no
 
-    - name: create xwiki directory
+    - name: Download Xwiki war file app2
+      get_url:
+        dest: /var/lib/lxc/app2/rootfs/opt/xwiki-enterprise-web-7.1.2-20150725.161333-26.war
+        url: http://maven.xwiki.org/snapshots/org/xwiki/enterprise/xwiki-enterprise-web/7.1.2-SNAPSHOT/xwiki-enterprise-web-7.1.2-20150725.161333-26.war 
+        force: no
+
+    - name: create xwiki directory app1
       file:
         path: /var/lib/lxc/app1/rootfs/var/lib/tomcat7/webapps/xwiki
         state: directory
         mode: 0777
+
+    - name: create xwiki directory app2
+      file:
+        path: /var/lib/lxc/app2/rootfs/var/lib/tomcat7/webapps/xwiki
+        state: directory
+        mode: 0777
         
-    - name: deploy xwiki
+    - name: deploy xwiki app1
       command: /usr/bin/unzip /var/lib/lxc/app1/rootfs/opt/xwiki-enterprise-web-7.1.2-20150725.161333-26.war
       args: 
         chdir: /var/lib/lxc/app1/rootfs/var/lib/tomcat7/webapps/xwiki
         creates: /var/lib/lxc/app1/rootfs/var/lib/tomcat7/webapps/xwiki/templates
-      notify: restart tomcat
 
-    - name: Configure hibernate file
+    - name: deploy xwiki app2
+      command: /usr/bin/unzip /var/lib/lxc/app2/rootfs/opt/xwiki-enterprise-web-7.1.2-20150725.161333-26.war
+      args: 
+        chdir: /var/lib/lxc/app2/rootfs/var/lib/tomcat7/webapps/xwiki
+        creates: /var/lib/lxc/app2/rootfs/var/lib/tomcat7/webapps/xwiki/templates
+
+    - name: Configure hibernate file app1
       copy:
         src: tomcat/hibernate.cfg.xml
         dest: /var/lib/lxc/app1/rootfs/var/lib/tomcat7/webapps/xwiki/WEB-INF/hibernate.cfg.xml
-      notify: restart tomcat
 
-  handlers:
-    - name: restart tomcat
-      action: lxc_container name=app1 container_command='service tomcat7 restart'
+    - name: Configure hibernate file app2
+      copy:
+        src: tomcat/hibernate.cfg.xml
+        dest: /var/lib/lxc/app2/rootfs/var/lib/tomcat7/webapps/xwiki/WEB-INF/hibernate.cfg.xml
 
+    - name: app1_container_stop
+      lxc_container:
+        name: app1
+        state: stopped
+
+    - name: app1_container_start
+      lxc_container:
+        name: app1
+        state: started
+
+    - name: app2_container_stop
+      lxc_container:
+        name: app2
+        state: stopped
+
+    - name: app2_container_start
+      lxc_container:
+        name: app2
+        state: started
+
+#  handlers:
+#    - name: restart app1 tomcat
+#      action: lxc_container name=app1 state=restarted
+
+#    - name: restart app2 tomcat
+#      action: lxc_container name=app2 state=restarted 

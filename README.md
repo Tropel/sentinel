@@ -15,3 +15,7 @@ Note: Playbook assumes a user account named sshafiullah is present on the target
       and has sudo privileges. Change this user at the top of the xwiki.yml file
 
 Note: Adjust the /etc/ansible/hosts and replace 'localhost' with a target server
+
+Note: xwiki.yml will appear to hang when app1_container task is reached. This occurs the
+first time lxc_container runs and creates an image. It may hang for 10-15 minutes and subsequent
+runs will be much faster.
