@@ -10,6 +10,16 @@
   sudo: yes
   sudo_user: root 
 
+  vars:
+    app1: 10.0.3.101
+    app2: 10.0.3.102
+    db1: 10.0.3.103
+    gateway: 10.0.3.1
+    range1: 10.0.3.2
+    range2: 10.0.3.254
+    netmask: 255.255.255.0
+    network: 10.0.3.0/24
+
   tasks:
 
 # Create LXC containers
@@ -21,12 +31,12 @@
 
 # Configure LXC to send fixed IP to app1, app2 and db1
     - name: Configure LXC default
-      copy:
+      template:
         src: lxc/lxc-net
         dest: /etc/default/lxc-net
 
     - name: Configure LXC dnsmasq
-      copy:
+      template:
         src: lxc/dnsmasq.conf
         dest: /etc/lxc/dnsmasq.conf
 
@@ -89,17 +99,17 @@
           apt-get install postgresql-9.3 -y
 
     - name: create interfaces app1
-      copy:
+      template:
         src: lxc/app1_interfaces
         dest: /var/lib/lxc/app1/rootfs/etc/network/interfaces
 
     - name: create interfaces app2
-      copy:
+      template:
         src: lxc/app2_interfaces
         dest: /var/lib/lxc/app2/rootfs/etc/network/interfaces
 
     - name: create interfaces db1
-      copy:
+      template:
         src: lxc/db1_interfaces
         dest: /var/lib/lxc/db1/rootfs/etc/network/interfaces
 
@@ -144,7 +154,7 @@
 # Postgres database configuration
 
     - name: Give ansible permission to access postgres
-      copy:
+      template:
         src: postgres/pg_hba.conf
         dest: /var/lib/lxc/db1/rootfs/etc/postgresql/9.3/main/pg_hba.conf
 
@@ -209,12 +219,12 @@
         creates: /var/lib/lxc/app2/rootfs/var/lib/tomcat7/webapps/ROOT/templates
 
     - name: Configure hibernate file app1
-      copy:
+      template:
         src: tomcat/hibernate.cfg.xml
         dest: /var/lib/lxc/app1/rootfs/var/lib/tomcat7/webapps/ROOT/WEB-INF/hibernate.cfg.xml
 
     - name: Configure hibernate file app2
-      copy:
+      template:
         src: tomcat/hibernate.cfg.xml
         dest: /var/lib/lxc/app2/rootfs/var/lib/tomcat7/webapps/ROOT/WEB-INF/hibernate.cfg.xml
 
@@ -240,6 +250,15 @@
         name: app2
         state: started
 
+    - name: db1_container_stop
+      lxc_container:
+        name: db1
+        state: stopped
+
+    - name: db1_container_start
+      lxc_container:
+        name: db1
+        state: started
 # Install nginx as a loadbalancer
     
     - name: Install nginx service
@@ -254,7 +273,7 @@
       notify: Reload nginx
 
     - name: Configure nginx defaults
-      copy:
+      template:
         src: nginx/default.conf
         dest: /etc/nginx/conf.d/default.conf
       notify: Reload nginx
