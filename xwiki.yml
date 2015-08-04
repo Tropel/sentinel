@@ -1,12 +1,12 @@
 ---
 
-# Playbook: sentinel xwiki
+# Playbook: xwiki
 # Author: Shahriar Shafiullah
 # Date: 03-08-2015
 # Description: Creates LXC containers and installs Xwiki on top of a tomcat7 and Postgressql stack
 
-- hosts: sentinel 
-  user: sshafiullah
+- hosts: nodes 
+  user: ubuntu 
   sudo: yes
   sudo_user: root 
 
@@ -19,6 +19,7 @@
         update_cache: yes
         state: installed
 
+# Configure LXC to send fixed IP to app1, app2 and db1
     - name: Configure LXC default
       copy:
         src: lxc/lxc-net
@@ -29,11 +30,17 @@
         src: lxc/dnsmasq.conf
         dest: /etc/lxc/dnsmasq.conf
 
+# Restart required to recognize dnsmasq new settings.
+# We only want to do this once so the service module was not used.
+# A handler was not appropriate for this as the next few stanzas depend
+# on the dnsmasq settings working (handlers only execute once the tasks 
+# section runs all the way through
     - name: Restart lxc-net
       shell: /usr/sbin/service lxc-net restart; /usr/bin/touch /opt/lxc
       args:
         creates: /opt/lxc
 
+# Install requirements for lxc_container module
     - apt: name={{item}}
       with_items:
         - python-setuptools
@@ -43,9 +50,14 @@
         - python-dev
         - lxc-dev
 
+# Supposed 'stable' version of python-pip on the Ubuntu repository does not function
+# Latest easy_install version used instead
     - easy_install: name=pip
+
+# pip module appears to run everytime regardless of if the package already exists
     - pip: name=git+https://github.com/lxc/python2-lxc.git#egg=python2-lxc
 
+# lxc_container is new to version 1.8 of ansible and seems to be a bit buggy
     - name: app1_container
       lxc_container:
         name: app1
@@ -171,39 +183,42 @@
         url: http://maven.xwiki.org/snapshots/org/xwiki/enterprise/xwiki-enterprise-web/7.1.2-SNAPSHOT/xwiki-enterprise-web-7.1.2-20150725.161333-26.war 
         force: no
 
-    - name: create xwiki directory app1
-      file:
-        path: /var/lib/lxc/app1/rootfs/var/lib/tomcat7/webapps/xwiki
-        state: directory
-        mode: 0777
-
-    - name: create xwiki directory app2
-      file:
-        path: /var/lib/lxc/app2/rootfs/var/lib/tomcat7/webapps/xwiki
-        state: directory
-        mode: 0777
+# Check if the default ROOT application for tomcat7 exists. Remove it if it does
+    - stat: path=/var/lib/lxc/app1/rootfs/var/lib/tomcat7/webapps/ROOT/index.html
+      register: app1_root
         
+    - stat: path=/var/lib/lxc/app2/rootfs/var/lib/tomcat7/webapps/ROOT/index.html
+      register: app2_root
+
+    - shell: "rm -rf /var/lib/lxc/app1/rootfs/var/lib/tomcat7/webapps/ROOT/*"
+      when: app1_root.stat.exists == True
+
+    - shell: "rm -rf /var/lib/lxc/app2/rootfs/var/lib/tomcat7/webapps/ROOT/*"
+      when: app2_root.stat.exists == True
+
     - name: deploy xwiki app1
       command: /usr/bin/unzip /var/lib/lxc/app1/rootfs/opt/xwiki-enterprise-web-7.1.2-20150725.161333-26.war
       args: 
-        chdir: /var/lib/lxc/app1/rootfs/var/lib/tomcat7/webapps/xwiki
-        creates: /var/lib/lxc/app1/rootfs/var/lib/tomcat7/webapps/xwiki/templates
+        chdir: /var/lib/lxc/app1/rootfs/var/lib/tomcat7/webapps/ROOT
+        creates: /var/lib/lxc/app1/rootfs/var/lib/tomcat7/webapps/ROOT/templates
 
     - name: deploy xwiki app2
       command: /usr/bin/unzip /var/lib/lxc/app2/rootfs/opt/xwiki-enterprise-web-7.1.2-20150725.161333-26.war
       args: 
-        chdir: /var/lib/lxc/app2/rootfs/var/lib/tomcat7/webapps/xwiki
-        creates: /var/lib/lxc/app2/rootfs/var/lib/tomcat7/webapps/xwiki/templates
+        chdir: /var/lib/lxc/app2/rootfs/var/lib/tomcat7/webapps/ROOT
+        creates: /var/lib/lxc/app2/rootfs/var/lib/tomcat7/webapps/ROOT/templates
 
     - name: Configure hibernate file app1
       copy:
         src: tomcat/hibernate.cfg.xml
-        dest: /var/lib/lxc/app1/rootfs/var/lib/tomcat7/webapps/xwiki/WEB-INF/hibernate.cfg.xml
+        dest: /var/lib/lxc/app1/rootfs/var/lib/tomcat7/webapps/ROOT/WEB-INF/hibernate.cfg.xml
 
     - name: Configure hibernate file app2
       copy:
         src: tomcat/hibernate.cfg.xml
-        dest: /var/lib/lxc/app2/rootfs/var/lib/tomcat7/webapps/xwiki/WEB-INF/hibernate.cfg.xml
+        dest: /var/lib/lxc/app2/rootfs/var/lib/tomcat7/webapps/ROOT/WEB-INF/hibernate.cfg.xml
+
+# Bug in lxc_container will not let us reload the configurations so a stop/start is required
 
     - name: app1_container_stop
       lxc_container:
@@ -225,9 +240,27 @@
         name: app2
         state: started
 
-#  handlers:
-#    - name: restart app1 tomcat
-#      action: lxc_container name=app1 state=restarted
+# Install nginx as a loadbalancer
+    
+    - name: Install nginx service
+      apt:
+        name: nginx
+        state: installed
 
-#    - name: restart app2 tomcat
-#      action: lxc_container name=app2 state=restarted 
+    - name: Create nginx.conf config
+      copy:
+        src: nginx/nginx.conf
+        dest: /etc/nginx/nginx.conf
+      notify: Reload nginx
+
+    - name: Configure nginx defaults
+      copy:
+        src: nginx/default.conf
+        dest: /etc/nginx/conf.d/default.conf
+      notify: Reload nginx
+
+
+  handlers:
+    - name: Reload nginx 
+      action: service name=nginx state=restarted
+

@@ -11,11 +11,14 @@ apt-get install ansible
 
 ansible-playbook --verbose xwiki.yml
 
-Note: Playbook assumes a user account named sshafiullah is present on the target server
-      and has sudo privileges. Change this user at the top of the xwiki.yml file
+Note: Playbook assumes a user account named ubuntu is present on the target server
+      and has sudo privileges. Change this user at the top of the xwiki.yml file to 
+      suit your environment.
 
-Note: Adjust the /etc/ansible/hosts and replace 'localhost' with a target server
+Note: Adjust the /etc/ansible/hosts and replace 'localhost' with a target server. 
+      A section named [nodes] is required. Copy the sample 'hosts' file in the 
+      repository and adjust for your environment
 
 Note: xwiki.yml will appear to hang when app1_container task is reached. This occurs the
-first time lxc_container runs and creates an image. It may hang for 10-15 minutes and subsequent
-runs will be much faster.
+      first time lxc_container runs and creates an image. It may hang for 10-15 minutes 
+      and subsequent runs will be much faster.
