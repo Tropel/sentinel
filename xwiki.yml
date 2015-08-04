@@ -1,0 +1,150 @@
+---
+
+# Playbook: sentinel xwiki
+# Author: Shahriar Shafiullah
+# Date: 03-08-2015
+# Description: Creates LXC containers and installs Xwiki on top of a tomcat7 and Postgressql stack
+
+- hosts: sentinel 
+  user: sshafiullah
+  sudo: yes
+  sudo_user: root 
+
+  tasks:
+
+# Create LXC containers
+    - name: Install LXC
+      apt:
+        name: lxc
+        update_cache: yes
+        state: installed
+
+    - name: Configure LXC default
+      copy:
+        src: lxc/lxc-net
+        dest: /etc/default/lxc-net
+
+    - name: Configure LXC dnsmasq
+      copy:
+        src: lxc/dnsmasq.conf
+        dest: /etc/lxc/dnsmasq.conf
+
+    - name: Restart lxc-net
+      shell: /usr/sbin/service lxc-net restart; /usr/bin/touch /opt/lxc
+      args:
+        creates: /opt/lxc
+
+    - apt: name={{item}}
+      with_items:
+        - python-setuptools
+        - unzip
+        - git
+        - build-essential
+        - python-dev
+        - lxc-dev
+
+    - easy_install: name=pip
+    - pip: name=git+https://github.com/lxc/python2-lxc.git#egg=python2-lxc
+
+    - name: app1_container
+      lxc_container:
+        name: app1
+        template: ubuntu
+        state: started
+        template_options: --release trusty
+        container_command: |
+          apt-get update
+          apt-get install tomcat7 -y
+
+    - name: db1_container
+      lxc_container:
+        name: db1
+        template: ubuntu
+        state: started
+        template_options: --release trusty
+        container_command: |
+          apt-get update
+          apt-get install postgresql-9.3 -y
+
+# Tomcat7 configuration 
+
+    - name: create setenv.sh file
+      copy:
+        src: tomcat/setenv.sh
+        dest: /var/lib/lxc/app1/rootfs/usr/share/tomcat7/bin/setenv.sh
+      notify: restart tomcat
+    
+    - name: change attributes on setenv.sh
+      file:
+        path: /var/lib/lxc/app1/rootfs/usr/share/tomcat7/bin/setenv.sh
+        owner: root
+        mode:  0755
+      notify: restart tomcat
+
+    - name: install postgres JDBC library
+      get_url:
+        dest: /var/lib/lxc/app1/rootfs/usr/share/tomcat7/lib/postgresql-9.4-1201.jdbc4.jar
+        url: https://jdbc.postgresql.org/download/postgresql-9.4-1201.jdbc4.jar
+        validate_certs: no
+        force: no
+
+
+# Postgres database configuration
+
+    - name: Give ansible permission to access postgres
+      copy:
+        src: postgres/pg_hba.conf
+        dest: /var/lib/lxc/db1/rootfs/etc/postgresql/9.3/main/pg_hba.conf
+
+    - name: Open port to app servers
+      copy:
+        src: postgres/postgresql.conf
+        dest: /var/lib/lxc/db1/rootfs/etc/postgresql/9.3/main/postgresql.conf
+
+    - name: Create DB sql script
+      copy:
+        src: postgres/xwiki.sql
+        dest:  /var/lib/lxc/db1/rootfs/opt/xwiki.sql
+
+    - name: db1_container
+      lxc_container:
+        name: db1
+        template: ubuntu
+        state: started
+        template_options: --release trusty
+        container_command: |
+          chown postgres:postgres /etc/postgresql/9.3/main/pg_hba.conf
+          service postgresql restart
+          /usr/bin/psql -U postgres -f /opt/xwiki.sql
+
+# Deploy the Xwiki application
+
+    - name: Download Xwiki war file
+      get_url:
+        dest: /var/lib/lxc/app1/rootfs/opt/xwiki-enterprise-web-7.1.2-20150725.161333-26.war
+        url: http://maven.xwiki.org/snapshots/org/xwiki/enterprise/xwiki-enterprise-web/7.1.2-SNAPSHOT/xwiki-enterprise-web-7.1.2-20150725.161333-26.war 
+        force: no
+
+    - name: create xwiki directory
+      file:
+        path: /var/lib/lxc/app1/rootfs/var/lib/tomcat7/webapps/xwiki
+        state: directory
+        mode: 0777
+        
+    - name: deploy xwiki
+      command: /usr/bin/unzip /var/lib/lxc/app1/rootfs/opt/xwiki-enterprise-web-7.1.2-20150725.161333-26.war
+      args: 
+        chdir: /var/lib/lxc/app1/rootfs/var/lib/tomcat7/webapps/xwiki
+        creates: /var/lib/lxc/app1/rootfs/var/lib/tomcat7/webapps/xwiki/templates
+      notify: restart tomcat
+
+    - name: Configure hibernate file
+      copy:
+        src: tomcat/hibernate.cfg.xml
+        dest: /var/lib/lxc/app1/rootfs/var/lib/tomcat7/webapps/xwiki/WEB-INF/hibernate.cfg.xml
+      notify: restart tomcat
+
+  handlers:
+    - name: restart tomcat
+      action: lxc_container name=app1 container_command='service tomcat7 restart'
+
