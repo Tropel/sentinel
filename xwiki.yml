@@ -88,6 +88,16 @@
           apt-get update
           apt-get install tomcat7 -y
 
+    - name: ensure_tomcat_app1 
+      lxc_container:
+        name: app1
+        container_command: apt-get install tomcat7 -y
+
+    - name: ensure_tomcat_app2 
+      lxc_container:
+        name: app2
+        container_command: apt-get install tomcat7 -y
+
     - name: db1_container
       lxc_container:
         name: db1
@@ -181,6 +191,17 @@
 
 # Deploy the Xwiki application
 
+#    - name: Copy war to app1
+#      copy:
+#        src: tomcat/xwiki-enterprise-web-7.1.2-20150725.161333-26.war
+#        dest: /var/lib/lxc/app1/rootfs/opt/xwiki-enterprise-web-7.1.2-20150725.161333-26.war
+
+#    - name: Copy war to app2
+#      copy:
+#        src: tomcat/xwiki-enterprise-web-7.1.2-20150725.161333-26.war
+#        dest: /var/lib/lxc/app2/rootfs/opt/xwiki-enterprise-web-7.1.2-20150725.161333-26.war
+
+# Temporarily commented out for brevity
     - name: Download Xwiki war file app1
       get_url:
         dest: /var/lib/lxc/app1/rootfs/opt/xwiki-enterprise-web-7.1.2-20150725.161333-26.war
@@ -260,10 +281,13 @@
         name: db1
         state: started
 # Install nginx as a loadbalancer
-    
+   
+    - name: Creat nginx user
+      user: name=nginx 
     - name: Install nginx service
       apt:
         name: nginx
+        update_cache: yes
         state: installed
 
     - name: Create nginx.conf config
